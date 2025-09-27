@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <algorithm>
+#include <random>
 
 using namespace std;
 
@@ -29,26 +30,106 @@ void print_board(const vector<vector<int>>& board, bool first) {
 
 // TODO: use algorithms to spawn properly
 void spawn_tile(vector<vector<int>>& board) {
-    for (int r=0;r<4;r++)
-        for (int c=0;c<4;c++)
-            if (board[r][c]==0) { board[r][c]=2; return; }
+    std::vector<std::pair<int,int>> empty_cells;
+    for (int r=0;r<4;r++) {
+        for (int c=0;c<4;c++) {
+            if (board[r][c]==0) {
+                empty_cells.push_back({r, c});
+            }
+        }
+    }
+    if (empty_cells.empty()) return;
+
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> dist(0, empty_cells.size() - 1);
+    auto [row, col] = empty_cells[dist(gen)];
+
+    std::uniform_int_distribution<> tile_dist(1, 10);
+    int value = (tile_dist(gen) == 10) ? 4 : 2;
+
+    board[row][col] = value;
     // TODO: Feed this into chat GPT and have it correct the function for you
     // with proper prompting
 }
 
 
 // TODO: Compress a row, remove zeroes, and then pad with zeroes at the end
-std::vector<int> compress_row(const std::vector<int>& row) {return row;}
+std::vector<int> compress_row(const std::vector<int>& row) {
+    std::vector<int> new_row;
+    std::copy_if(row.begin(), row.end(), std::back_inserter(new_row),
+                 [](int x){ return x != 0; });
+    while (new_row.size() < 4) {
+        new_row.push_back(0);
+    }
+    return new_row;
+}
 // TODO: Merge a row (assumes the row is already compressed)
-std::vector<int> merge_row(std::vector<int> row) {return row;}
+std::vector<int> merge_row(std::vector<int> row) {
+    for (int i = 0; i < 3; i++) {
+        if (row[i] != 0 && row[i] == row[i+1]) {
+            row[i] *= 2;
+            row[i+1] = 0;
+        }
+    }
+    return compress_row(row);
+}
 // TODO: use copy_if and iterators
-bool move_left(vector<vector<int>>& board){return false;}
-// TODO: use reverse iterators
-bool move_right(vector<vector<int>>& board){return false;}
+bool move_left(vector<vector<int>>& board) {
+    bool moved = false;
+    for (int r = 0; r < 4; r++) {
+        vector<int> row = compress_row(board[r]);
+        row = merge_row(row);
+        if (row != board[r]) moved = true; 
+        board[r] = row;
+    }
+    return moved;
+}
+bool move_right(vector<vector<int>>& board) {
+    bool moved = false;
+    for (int r = 0; r < 4; r++) {
+        vector<int> row(board[r].rbegin(), board[r].rend());
+        row = compress_row(row);
+        row = merge_row(row);
+        reverse(row.begin(), row.end());
+        if (row != board[r]) moved = true;
+        board[r] = row;
+    }
+    return moved;
+}
+
 // TODO: use column traversal
-bool move_up(vector<vector<int>>& board){return false;}
+bool move_up(vector<vector<int>>& board) {
+    bool moved = false;
+    for (int c = 0; c < 4; c++) {
+        vector<int> col;
+        for (int r = 0; r < 4; r++) col.push_back(board[r][c]);
+        col = compress_row(col);
+        col = merge_row(col);
+        for (int r = 0; r < 4; r++) {
+            if (board[r][c] != col[r]) moved = true;
+            board[r][c] = col[r];
+        }
+    }
+    return moved;
+}
+
 // TODO: use column traversal with reverse
-bool move_down(vector<vector<int>>& board){return false;}
+bool move_down(vector<vector<int>>& board) {
+    bool moved = false;
+    for (int c = 0; c < 4; c++) {
+        vector<int> col;
+        for (int r = 3; r >= 0; r--) col.push_back(board[r][c]);
+        col = compress_row(col);
+        col = merge_row(col);
+        for (int r = 3; r >= 0; r--) {
+            if (board[r][c] != col[3 - r]) moved = true;
+            board[r][c] = col[3 - r];
+        }
+    }
+    return moved;
+}
 
 int main(){
     srand(time(nullptr));
@@ -69,6 +150,12 @@ int main(){
 
         if (cmd=='u') {
             // TODO: get the history and print the board and continue
+            if (!history.empty()) {
+                board = history.top();
+                history.pop();
+                print_board(board, false);
+            }
+            continue;
         }
 
         vector<vector<int>> prev = board;
@@ -80,6 +167,7 @@ int main(){
 
         if (moved) {
             // TODO: Store the previous state here!
+            history.push(prev);
             spawn_tile(board);
         }
     }
